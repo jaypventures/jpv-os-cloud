@@ -1,0 +1,16 @@
+{
+  "name": "jpv-os-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JPV-OS Cloud event-driven backend",
+  "main": "nexus/server.js",
+  "scripts": {
+    "start": "node nexus/server.js",
+    "start:nexus": "node nexus/server.js",
+    "start:bus": "node bus/server.js",
+    "start:ledger": "node ledger/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
