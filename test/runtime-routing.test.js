@@ -158,6 +158,34 @@ test(
             Buffer.concat(chunks).toString('utf8') || '{}'
           );
 
+          assert.equal(
+            body.schema_version,
+            'jpv.runtime-executor-request.v2'
+          );
+          assert.equal(
+            body.capability,
+            'jpv.runtime.deploy'
+          );
+          assert.equal(
+            body.repository,
+            'jaypVLabs/JPV-OS'
+          );
+          assert.equal(
+            body.runtime_target,
+            'jpv-native-primary'
+          );
+          assert.equal(
+            body.expected_state,
+            'DEPLOYED_AND_VERIFIED'
+          );
+          assert.equal(
+            Object.prototype.hasOwnProperty.call(
+              body,
+              'migration_set_digest'
+            ),
+            false
+          );
+
           if (body.operation_id === 'conflict') {
             return json(409, {
               error: 'RUNTIME_DEPLOY_IDEMPOTENCY_CONFLICT'

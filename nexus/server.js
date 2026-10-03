@@ -102,6 +102,36 @@ app.post('/command', async (req, res, next) => {
     });
   }
 
+  const candidateSha = String(
+    req.body.payload.candidate_sha || ''
+  ).toLowerCase();
+
+  const operationId = String(
+    req.body.payload.operation_id || ''
+  ).trim();
+
+  if (!/^[0-9a-f]{40}$/.test(candidateSha)) {
+    return res.status(400).json({
+      error: 'RUNTIME_DEPLOY_REVISION_REQUIRED'
+    });
+  }
+
+  if (!operationId) {
+    return res.status(400).json({
+      error: 'RUNTIME_DEPLOY_OPERATION_ID_REQUIRED'
+    });
+  }
+
+  const runtimeRequest = {
+    schema_version: 'jpv.runtime-executor-request.v2',
+    operation_id: operationId,
+    capability: 'jpv.runtime.deploy',
+    repository: 'jaypVLabs/JPV-OS',
+    runtime_target: 'jpv-native-primary',
+    candidate_sha: candidateSha,
+    expected_state: 'DEPLOYED_AND_VERIFIED'
+  };
+
   const result = await jpvRuntimeBusRequest(
     '/runtime/deploy',
     {
@@ -109,7 +139,7 @@ app.post('/command', async (req, res, next) => {
       headers: {
         'content-type': 'application/json'
       },
-      body: JSON.stringify(req.body.payload)
+      body: JSON.stringify(runtimeRequest)
     }
   );
 
