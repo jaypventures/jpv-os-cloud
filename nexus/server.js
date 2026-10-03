@@ -27,6 +27,125 @@ app.get('/health', (req, res) => {
   });
 });
 
+
+// JPV_RUNTIME_NEXUS_V1
+const jpvRuntimeBusUrl = String(
+  process.env.JPV_BUS_URL ||
+  process.env.BUS_URL ||
+  'http://127.0.0.1:3001'
+).replace(/\/+$/, '');
+
+const jpvRuntimeBusTimeoutMs = Number(
+  process.env.JPV_BUS_TIMEOUT_MS || 5000
+);
+
+async function jpvRuntimeBusRequest(path, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    jpvRuntimeBusTimeoutMs
+  );
+
+  try {
+    const response = await fetch(
+      `${jpvRuntimeBusUrl}${path}`,
+      {
+        ...options,
+        signal: controller.signal
+      }
+    );
+
+    const text = await response.text();
+
+    let body;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = {
+        error: 'JPV_BUS_INVALID_JSON_RESPONSE'
+      };
+    }
+
+    return {
+      status: response.status,
+      body
+    };
+  } catch (error) {
+    return {
+      status: error?.name === 'AbortError' ? 504 : 502,
+      body: {
+        error:
+          error?.name === 'AbortError'
+            ? 'JPV_BUS_TIMEOUT'
+            : 'JPV_BUS_UNREACHABLE'
+      }
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Runtime deployment commands are intercepted before the generic
+// durable event path because this command has an existing canonical
+// execution authority: jpv-native-primary.
+app.post('/command', async (req, res, next) => {
+  if (req.body?.type !== 'runtime.deploy') {
+    return next();
+  }
+
+  if (
+    !req.body.payload ||
+    typeof req.body.payload !== 'object'
+  ) {
+    return res.status(400).json({
+      error: 'RUNTIME_DEPLOY_PAYLOAD_REQUIRED'
+    });
+  }
+
+  const result = await jpvRuntimeBusRequest(
+    '/runtime/deploy',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(req.body.payload)
+    }
+  );
+
+  return res.status(result.status).json({
+    executed: result.status >= 200 && result.status < 300,
+    command: 'runtime.deploy',
+    ...result.body
+  });
+});
+
+app.get(
+  '/readback/runtime/:executionId',
+  async (req, res) => {
+    const result = await jpvRuntimeBusRequest(
+      `/runtime/deploy/${encodeURIComponent(
+        req.params.executionId
+      )}`,
+      {
+        method: 'GET'
+      }
+    );
+
+    return res.status(result.status).json(result.body);
+  }
+);
+
+app.get('/runtime/health', async (_req, res) => {
+  const result = await jpvRuntimeBusRequest(
+    '/runtime/health',
+    {
+      method: 'GET'
+    }
+  );
+
+  return res.status(result.status).json(result.body);
+});
 app.post('/command', async (req, res) => {
   const command = req.body;
 

@@ -1,3 +1,7 @@
+
+// JPV_RUNTIME_ROUTING_V1
+const { createRuntimeClient } = require('./runtime-client');
+const jpvRuntimeClient = createRuntimeClient();
 const express = require('express');
 
 const app = express();
@@ -93,6 +97,34 @@ app.post('/event', async (req, res) => {
   }
 });
 
+
+// JPV_RUNTIME_ROUTING_V1_ROUTES
+app.get('/runtime/health', async (_req, res) => {
+  const result = await jpvRuntimeClient.health();
+  return res.status(result.status).json(result.body);
+});
+
+app.post('/runtime/deploy', async (req, res) => {
+  const result = await jpvRuntimeClient.deploy(req.body);
+
+  return res.status(result.status).json({
+    ...result.body,
+    jpv_runtime_authority: true,
+    provider_authority: false
+  });
+});
+
+app.get('/runtime/deploy/:executionId', async (req, res) => {
+  const result = await jpvRuntimeClient.readback(
+    req.params.executionId
+  );
+
+  return res.status(result.status).json({
+    ...result.body,
+    jpv_runtime_authority: true,
+    provider_authority: false
+  });
+});
 app.listen(port, '0.0.0.0', () => {
   console.log(
     `BUS listening on 0.0.0.0:${port}; ` +
