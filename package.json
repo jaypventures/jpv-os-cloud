@@ -8,7 +8,9 @@
     "start": "node nexus/server.js",
     "start:nexus": "node nexus/server.js",
     "start:bus": "node bus/server.js",
-    "start:ledger": "node ledger/server.js"
+    "start:ledger": "node ledger/server.js",
+    "jpvci": "node --test test/jpvci.test.js",
+    "test": "npm run jpvci"
   },
   "dependencies": {
     "express": "^4.21.2"

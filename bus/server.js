@@ -8,45 +8,94 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
+
   next();
 });
+
 app.use(express.json());
 
 app.get('/health', (req, res) => {
-  res.status(200).json({ service: 'bus', status: 'ok', ledgerUrl: ledgerUrl || null });
+  res.status(200).json({
+    service: 'bus',
+    status: 'ok',
+    ledgerUrl: ledgerUrl || null,
+    admission: 'persistence-confirmed'
+  });
 });
 
-app.post('/event', (req, res) => {
+app.post('/event', async (req, res) => {
   const event = req.body;
 
-  console.log('BUS received event:', JSON.stringify(event));
-
-  if (!ledgerUrl) {
-    return res.status(500).json({ error: 'LEDGER_URL is not configured' });
+  if (!event || typeof event !== 'object' || Array.isArray(event)) {
+    return res.status(400).json({
+      admitted: false,
+      error: 'Event must be a JSON object'
+    });
   }
 
-  setImmediate(async () => {
-    try {
-      const response = await fetch(`${ledgerUrl.replace(/\/$/, '')}/event`, {
+  if (!ledgerUrl) {
+    return res.status(503).json({
+      admitted: false,
+      error: 'LEDGER_URL is not configured'
+    });
+  }
+
+  try {
+    const response = await fetch(
+      `${ledgerUrl.replace(/\/$/, '')}/event`,
+      {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(event)
-      });
-
-      if (!response.ok) {
-        console.error('BUS failed to forward event:', response.status);
       }
-    } catch (error) {
-      console.error('BUS forward error:', error.message);
-    }
-  });
+    );
 
-  res.status(202).json({ status: 'queued' });
+    let result = null;
+
+    try {
+      result = await response.json();
+    } catch {
+      result = null;
+    }
+
+    if (!response.ok || !result || result.stored !== true) {
+      console.error(
+        'BUS admission rejected:',
+        response.status,
+        JSON.stringify(result)
+      );
+
+      return res.status(502).json({
+        admitted: false,
+        ledgerStatus: response.status,
+        ledger: result
+      });
+    }
+
+    return res.status(response.status === 201 ? 201 : 200).json({
+      admitted: true,
+      durable: true,
+      duplicate: result.duplicate === true,
+      id: result.id,
+      eventCount: result.eventCount
+    });
+  } catch (error) {
+    console.error('BUS admission failure:', error.message);
+
+    return res.status(502).json({
+      admitted: false,
+      error: 'Authoritative ledger unavailable'
+    });
+  }
 });
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`BUS listening on 0.0.0.0:${port}`);
+  console.log(
+    `BUS listening on 0.0.0.0:${port}; ` +
+    'admission=persistence-confirmed'
+  );
 });
